@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { jsPDF } from 'jspdf';
+import { toast } from '@/hooks/use-toast';
 
 interface BookSection {
   id: string;
@@ -167,6 +170,90 @@ const Index = () => {
     setSections([...sections, newSection]);
     setNewChapter({ title: '', type: 'chapter', content: '' });
     setDialogOpen(false);
+    toast({
+      title: 'Глава создана',
+      description: `"${newChapter.title}" успешно добавлена в книгу`,
+    });
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const maxWidth = pageWidth - 2 * margin;
+    let yPosition = margin;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('Книга', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 15;
+
+    sections.forEach((section, index) => {
+      if (yPosition > pageHeight - 40) {
+        doc.addPage();
+        yPosition = margin;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      const titleLines = doc.splitTextToSize(section.title, maxWidth);
+      doc.text(titleLines, margin, yPosition);
+      yPosition += titleLines.length * 8 + 5;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(12);
+      
+      section.content.forEach(paragraph => {
+        if (paragraph === '') {
+          yPosition += 5;
+        } else {
+          const lines = doc.splitTextToSize(paragraph, maxWidth);
+          if (yPosition + lines.length * 6 > pageHeight - margin) {
+            doc.addPage();
+            yPosition = margin;
+          }
+          doc.text(lines, margin, yPosition);
+          yPosition += lines.length * 6 + 3;
+        }
+      });
+
+      if (index < sections.length - 1) {
+        yPosition += 10;
+      }
+    });
+
+    doc.save('книга.pdf');
+    toast({
+      title: 'PDF экспортирован',
+      description: 'Книга успешно сохранена в формате PDF',
+    });
+  };
+
+  const exportToText = () => {
+    let textContent = 'КНИГА\n\n';
+    sections.forEach(section => {
+      textContent += `${section.title}\n${'='.repeat(section.title.length)}\n\n`;
+      section.content.forEach(paragraph => {
+        textContent += paragraph + '\n';
+      });
+      textContent += '\n\n';
+    });
+
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'книга.txt';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: 'Текст экспортирован',
+      description: 'Книга успешно сохранена в текстовом формате',
+    });
   };
 
   useEffect(() => {
@@ -339,6 +426,28 @@ const Index = () => {
                 >
                   <Icon name="Bookmark" size={20} />
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-foreground"
+                      title="Экспорт книги"
+                    >
+                      <Icon name="Download" size={20} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={exportToPDF}>
+                      <Icon name="FileText" size={16} className="mr-2" />
+                      Экспорт в PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={exportToText}>
+                      <Icon name="FileType" size={16} className="mr-2" />
+                      Экспорт в TXT
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="ghost"
                   size="icon"
