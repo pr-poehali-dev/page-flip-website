@@ -1,9 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface BookSection {
   id: string;
@@ -101,9 +106,18 @@ const initialSections: BookSection[] = [
 
 const Index = () => {
   const [currentPage, setCurrentPage] = useState(0);
-  const [sections] = useState<BookSection[]>(initialSections);
+  const [sections, setSections] = useState<BookSection[]>(initialSections);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFlipping, setIsFlipping] = useState(false);
+  const [flipDirection, setFlipDirection] = useState<'next' | 'prev'>('next');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newChapter, setNewChapter] = useState({
+    title: '',
+    type: 'chapter' as BookSection['type'],
+    content: ''
+  });
 
   const toggleBookmark = () => {
     if (bookmarks.includes(currentPage)) {
@@ -115,15 +129,55 @@ const Index = () => {
 
   const goToNextPage = () => {
     if (currentPage < sections.length - 1) {
-      setCurrentPage(currentPage + 1);
+      setIsFlipping(true);
+      setFlipDirection('next');
+      setTimeout(() => {
+        setCurrentPage(currentPage + 1);
+        setIsFlipping(false);
+      }, 600);
     }
   };
 
   const goToPrevPage = () => {
     if (currentPage > 0) {
-      setCurrentPage(currentPage - 1);
+      setIsFlipping(true);
+      setFlipDirection('prev');
+      setTimeout(() => {
+        setCurrentPage(currentPage - 1);
+        setIsFlipping(false);
+      }, 600);
     }
   };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+    if (!isFullscreen) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const addNewChapter = () => {
+    const contentArray = newChapter.content.split('\n\n');
+    const newSection: BookSection = {
+      id: `custom-${Date.now()}`,
+      title: newChapter.title,
+      type: newChapter.type,
+      content: contentArray
+    };
+    setSections([...sections, newSection]);
+    setNewChapter({ title: '', type: 'chapter', content: '' });
+    setDialogOpen(false);
+  };
+
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') goToNextPage();
+      if (e.key === 'ArrowLeft') goToPrevPage();
+      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [currentPage, sections.length]);
 
   const currentSection = sections[currentPage];
   const progress = ((currentPage + 1) / sections.length) * 100;
@@ -150,7 +204,7 @@ const Index = () => {
           </Button>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-120px)]">
+        <ScrollArea className="h-[calc(100vh-200px)]">
           <div className="p-6 space-y-2">
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-2">Прогресс чтения</p>
@@ -198,41 +252,133 @@ const Index = () => {
             </div>
           </div>
         </ScrollArea>
+
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-sidebar-border bg-sidebar">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full" variant="default">
+                <Icon name="Plus" size={18} className="mr-2" />
+                Добавить главу
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[525px]">
+              <DialogHeader>
+                <DialogTitle>Создать новую главу</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Название</Label>
+                  <Input
+                    id="title"
+                    placeholder="Название главы"
+                    value={newChapter.title}
+                    onChange={(e) => setNewChapter({...newChapter, title: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Тип раздела</Label>
+                  <Select
+                    value={newChapter.type}
+                    onValueChange={(value) => setNewChapter({...newChapter, type: value as BookSection['type']})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="chapter">Глава</SelectItem>
+                      <SelectItem value="note">Примечание</SelectItem>
+                      <SelectItem value="appendix">Приложение</SelectItem>
+                      <SelectItem value="intro">Введение</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="content">Содержание</Label>
+                  <Textarea
+                    id="content"
+                    placeholder="Введите текст главы. Разделяйте абзацы пустой строкой."
+                    className="min-h-[200px]"
+                    value={newChapter.content}
+                    onChange={(e) => setNewChapter({...newChapter, content: e.target.value})}
+                  />
+                </div>
+                <Button onClick={addNewChapter} className="w-full">
+                  Создать главу
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-80' : 'ml-0'}`}>
-        <div className="fixed top-0 right-0 left-0 bg-background/80 backdrop-blur-sm border-b border-border z-40 px-6 py-4">
-          <div className="flex items-center justify-between max-w-6xl mx-auto">
-            <div className="flex items-center gap-4">
-              {!sidebarOpen && (
+        {!isFullscreen && (
+          <div className="fixed top-0 right-0 left-0 bg-background/80 backdrop-blur-sm border-b border-border z-40 px-6 py-4">
+            <div className="flex items-center justify-between max-w-6xl mx-auto">
+              <div className="flex items-center gap-4">
+                {!sidebarOpen && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSidebarOpen(true)}
+                    className="text-foreground"
+                  >
+                    <Icon name="Menu" size={20} />
+                  </Button>
+                )}
+                <h2 className="text-lg font-semibold text-foreground">{currentSection.title}</h2>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setSidebarOpen(true)}
-                  className="text-foreground"
+                  onClick={toggleBookmark}
+                  className={bookmarks.includes(currentPage) ? 'text-primary' : 'text-foreground'}
+                  title="Добавить закладку"
                 >
-                  <Icon name="Menu" size={20} />
+                  <Icon name="Bookmark" size={20} />
                 </Button>
-              )}
-              <h2 className="text-lg font-semibold text-foreground">{currentSection.title}</h2>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleBookmark}
-                className={bookmarks.includes(currentPage) ? 'text-primary' : 'text-foreground'}
-              >
-                <Icon name="Bookmark" size={20} />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleFullscreen}
+                  className="text-foreground"
+                  title="Полноэкранный режим (F)"
+                >
+                  <Icon name="Maximize2" size={20} />
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="pt-24 pb-12 px-6 flex items-center justify-center min-h-screen">
-          <div className="max-w-4xl w-full perspective-1000">
-            <Card className="bg-card text-card-foreground shadow-2xl overflow-hidden animate-fade-in">
+        <div className={`${isFullscreen ? 'pt-12' : 'pt-24'} pb-12 px-6 flex items-center justify-center min-h-screen relative`}>
+          {isFullscreen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="fixed top-4 right-4 z-50 text-foreground bg-background/50 hover:bg-background/80"
+              title="Выйти из полноэкранного режима (F)"
+            >
+              <Icon name="Minimize2" size={20} />
+            </Button>
+          )}
+
+          <div className="max-w-4xl w-full" style={{ perspective: '2000px' }}>
+            <Card 
+              className={`bg-card text-card-foreground shadow-2xl overflow-hidden transition-all duration-600 ${
+                isFlipping 
+                  ? flipDirection === 'next' 
+                    ? 'animate-page-flip' 
+                    : 'animate-page-flip-back'
+                  : 'animate-fade-in'
+              }`}
+              style={{
+                transformStyle: 'preserve-3d',
+              }}
+            >
               <div className="p-12 md:p-16 min-h-[600px] flex flex-col">
                 <h2 className="text-3xl md:text-4xl font-bold mb-8 font-serif text-card-foreground">
                   {currentSection.title}
@@ -252,7 +398,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     onClick={goToPrevPage}
-                    disabled={currentPage === 0}
+                    disabled={currentPage === 0 || isFlipping}
                     className="flex items-center gap-2"
                   >
                     <Icon name="ChevronLeft" size={20} />
@@ -266,7 +412,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     onClick={goToNextPage}
-                    disabled={currentPage === sections.length - 1}
+                    disabled={currentPage === sections.length - 1 || isFlipping}
                     className="flex items-center gap-2"
                   >
                     Вперед
@@ -276,6 +422,30 @@ const Index = () => {
               </div>
             </Card>
           </div>
+
+          {isFullscreen && (
+            <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-background/80 backdrop-blur-sm rounded-full px-6 py-3 flex items-center gap-4 border border-border">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToPrevPage}
+                disabled={currentPage === 0 || isFlipping}
+              >
+                <Icon name="ChevronLeft" size={20} />
+              </Button>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                {currentPage + 1} / {sections.length}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToNextPage}
+                disabled={currentPage === sections.length - 1 || isFlipping}
+              >
+                <Icon name="ChevronRight" size={20} />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
